@@ -1,0 +1,16 @@
+mcp_servers:
+  - mcp_servers/test.mcp.json
+
+system_prompts:
+  - prompts/otto.md
+  - prompts/developer.md
+  - prompts/tools.md
+  - prompts/more.md
+  - prompts/tasks.md
+
+max_iters: 10
+
+ollama:
+  host: ollama
+  model: qwen3-coder:30b
+  context_length: 32768
