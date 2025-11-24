@@ -1,10 +1,16 @@
 import json
 import yaml
 
+DEFAULT_MAX_TOOLS_PER_ITER = 1
+
 def load_config(path="otto.yaml"):
   with open(path, "r") as f:
     config = yaml.safe_load(f)
 
+  # Set default value for max_tools_per_iter if not present
+  if "max_tools_per_iter" not in config:
+    config["max_tools_per_iter"] = DEFAULT_MAX_TOOLS_PER_ITER
+  
   return config
   
 def load_system_prompt(prompt_files):

@@ -1,5 +1,6 @@
 mcp_servers:
   - mcp_servers/test.mcp.json
+  # - mcp_servers/filesystem.mcp.json
 
 system_prompts:
   - prompts/otto.md
@@ -9,6 +10,7 @@ system_prompts:
   - prompts/tasks.md
 
 max_iters: 10
+max_tools_per_iter: 1
 
 ollama:
   host: ollama

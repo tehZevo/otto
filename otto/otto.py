@@ -7,12 +7,11 @@ from fastmcp import Client as MCPClient
 from .config import load_system_prompt, load_mcp_servers, load_config
 from .utils import format_tools, run_ollama, print_message
 
-#TODO: max tool calls per iter?
-
 config = load_config()
 MODEL = config["ollama"]["model"]
 CONTEXT_LENGTH = config["ollama"]["context_length"]
 MAX_ITERS = config["max_iters"]
+MAX_TOOLS_PER_ITER = config["max_tools_per_iter"]
 
 #TODO: use as default in config.py
 USER_PROMPT = "Execute your given tasks autonomously without any further user input."
@@ -40,7 +39,13 @@ async def append_message_and_call_tools(content, tool_calls):
     add_message(content, role="assistant")
     print_message(messages[-1])
   
-  for tool_call in tool_calls:
+  # Limit the number of tools executed per iteration
+  tools_to_execute = tool_calls[:MAX_TOOLS_PER_ITER]
+  
+  if len(tool_calls) > MAX_TOOLS_PER_ITER:
+    print(f"⚠ Limiting tool execution to {MAX_TOOLS_PER_ITER} of {len(tool_calls)} requested tools")
+  
+  for tool_call in tools_to_execute:
     tool_result = await mcp_client.call_tool(tool_call.function.name, tool_call.function.arguments)
     #TODO: check if error
     # print(tool_result)

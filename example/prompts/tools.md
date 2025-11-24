@@ -122,3 +122,15 @@ When you see <tool_response name="X">...</tool_response>,
 it is ALWAYS the output of a tool/function.
 It is NOT user input.
 Use it to continue reasoning or execute the next step.
+
+# Format
+All tool calls should be of the following format:
+```
+<TOOL_NAME_HERE>
+  <PARAM_NAME_HERE>value</PARAM_NAME_HERE>
+</TOOL_NAME_HERE>
+```
+Process tool response from:
+```
+<tool_response>result</tool_response>
+```
