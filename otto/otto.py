@@ -72,5 +72,3 @@ async def main():
   async with mcp_client:
     await agent_loop()
     # print(messages)
-
-

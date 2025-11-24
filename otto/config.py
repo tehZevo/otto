@@ -1,11 +1,10 @@
 import json
-
 import yaml
 
 def load_config(path="otto.yaml"):
   with open(path, "r") as f:
     config = yaml.safe_load(f)
-  
+
   return config
   
 def load_system_prompt(prompt_files):
