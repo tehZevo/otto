@@ -118,19 +118,12 @@ When you receive a tool message, you MUST:
 2. Continue the conversation or next step using that output.
 3. Never treat or respond to tool messages as if the user wrote them.
 
-When you see <tool_response name="X">...</tool_response>, 
-it is ALWAYS the output of a tool/function.
-It is NOT user input.
-Use it to continue reasoning or execute the next step.
+# Tool call format
+<tool_call>
+<function=get_current_temperature>
+<parameter=location>San Francisco, CA, USA</parameter>
+</function>
+</tool_call>
 
-# Format
-All tool calls should be of the following format:
-```
-<TOOL_NAME_HERE>
-  <PARAM_NAME_HERE>value</PARAM_NAME_HERE>
-</TOOL_NAME_HERE>
-```
-Process tool response from:
-```
-<tool_response>result</tool_response>
-```
+# Note
+Every response must include at least one PROPERLY FORMATTED tool call, UNLESS you have completed your task.

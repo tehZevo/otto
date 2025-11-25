@@ -1,8 +1,3 @@
-import sys
-import asyncio
-
-from ollama import Client
-from fastmcp import Client as MCPClient, FastMCP
 
 def format_tools(tools):
   return [{
@@ -15,8 +10,12 @@ def format_tools(tools):
   } for tool in tools]
 
 async def run_ollama(client, mcp_client, model, num_ctx, messages):
+  print(f"📋 Fetching available tools from MCP servers...")
   tools = await mcp_client.list_tools()
   tools = format_tools(tools)
+  print(f"✅ Found {len(tools)} tools available")
+  
+  print(f"🤖 Calling Ollama model: {model}")
   #TODO: make ollama call async?
   return client.chat(
     model=model,
@@ -36,5 +35,10 @@ def print_message(message):
   elif message['role'] == 'assistant':
     print(f"💬 {message['content']}")
   elif message['role'] == 'tool':
-    # print(f"🔧 {message['tool_name']}: {message['content']}")
     print(f"🔧 {message['tool_name']}")
+    # Print the tool response content with indentation for readability
+    content = message['content']
+    # Indent each line of the content for better formatting
+    for line in content.split('\n'):
+      if line.strip():  # Only print non-empty lines
+        print(f"   {line}")

@@ -5,7 +5,7 @@ from ollama import Client
 from fastmcp import Client as MCPClient
 
 from .config import load_system_prompt, load_mcp_servers, load_config
-from .utils import format_tools, run_ollama, print_message
+from .utils import run_ollama, print_message
 
 config = load_config()
 MODEL = config["ollama"]["model"]
@@ -46,34 +46,59 @@ async def append_message_and_call_tools(content, tool_calls):
     print(f"⚠ Limiting tool execution to {MAX_TOOLS_PER_ITER} of {len(tool_calls)} requested tools")
   
   for tool_call in tools_to_execute:
+    print(f"🔧 Calling tool: {tool_call.function.name}")
+    print(f"   Arguments: {tool_call.function.arguments}")
+    
     tool_result = await mcp_client.call_tool(tool_call.function.name, tool_call.function.arguments)
     #TODO: check if error
-    # print(tool_result)
-    add_tool_message(tool_call.function.name, tool_result.data)
+    #TODO: best way to parse result?
+    add_tool_message(tool_call.function.name, str(tool_result.content))
     print_message(messages[-1])
 
 async def agent_loop():
   add_message(USER_PROMPT, role="user")
+  print(f"🚀 Starting agent loop (max iterations: {MAX_ITERS})")
 
   iters = 0
   tool_calls = []
+  retried_no_tools = False
   
   while True:
-    #TODO: catch error
+    print(f"\n🔄 Iteration {iters + 1}/{MAX_ITERS}")
+
     response = await run_ollama(client, mcp_client, MODEL, CONTEXT_LENGTH, messages)
+    
     #TODO: for future reference
     up_tokens = response.prompt_eval_count
     down_tokens = response.eval_count
     print(f"⇄ API Request [⬆ {up_tokens} / ⬇ {down_tokens}]")
     tool_calls = response.message.tool_calls or []
     
+    if len(tool_calls) > 0:
+      print(f"🎯 Agent requested {len(tool_calls)} tool(s)")
+      retried_no_tools = False  # Reset retry flag when tools are called
+    else:
+      print(f"✅ Agent completed (no more tools requested)")
+    
     await append_message_and_call_tools(response.message.content, tool_calls)
     iters += 1
 
-    if iters >= MAX_ITERS or len(tool_calls) == 0:
+    if iters >= MAX_ITERS:
+      print(f"\n⏹ Stopped: Reached max iterations ({MAX_ITERS})")
       break
+    if len(tool_calls) == 0:
+      if not retried_no_tools:
+        print(f"🔄 No tool calls detected. Retrying once with appended message...")
+        add_message("You did not call any tools. If you have completed your task(s), state that you have completed your task(s). Otherwise, call the appropriate tool(s).", role="user")
+        retried_no_tools = True
+        continue
+      else:
+        print(f"\n⏹ Stopped: Agent finished (no more tools after retry)")
+        break
 
 async def main():
+  print("🔌 Initializing MCP client...")
   async with mcp_client:
+    print("✅ MCP client initialized")
     await agent_loop()
-    # print(messages)
+    print("\n✅ Agent loop completed")
