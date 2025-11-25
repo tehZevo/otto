@@ -5,7 +5,7 @@ from ollama import Client
 from fastmcp import Client as MCPClient
 
 from .config import load_system_prompt, load_mcp_servers, load_config
-from .utils import run_ollama, print_message
+from .utils import run_ollama, print_message, format_tools
 
 config = load_config()
 MODEL = config["ollama"]["model"]
@@ -33,6 +33,9 @@ add_message(system_prompt, role="system")
 mcp_servers_config = load_mcp_servers(config["mcp_servers"])
 #TODO: create dummy client if empty
 mcp_client = MCPClient(mcp_servers_config)
+
+# Global variable to store pre-loaded tools
+tools = []
 
 async def append_message_and_call_tools(content, tool_calls):
   if content.strip() != "":
@@ -66,7 +69,7 @@ async def agent_loop():
   while True:
     print(f"\n🔄 Iteration {iters + 1}/{MAX_ITERS}")
 
-    response = await run_ollama(client, mcp_client, MODEL, CONTEXT_LENGTH, messages)
+    response = await run_ollama(client, MODEL, CONTEXT_LENGTH, messages, tools)
     
     #TODO: for future reference
     up_tokens = response.prompt_eval_count
@@ -97,8 +100,17 @@ async def agent_loop():
         break
 
 async def main():
+  global tools
+  
   print("🔌 Initializing MCP client...")
   async with mcp_client:
     print("✅ MCP client initialized")
+    
+    # Load tools once at initialization
+    print(f"📋 Fetching available tools from MCP servers...")
+    raw_tools = await mcp_client.list_tools()
+    tools = format_tools(raw_tools)
+    print(f"✅ Found {len(tools)} tools available")
+    
     await agent_loop()
     print("\n✅ Agent loop completed")

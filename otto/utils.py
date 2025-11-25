@@ -9,12 +9,7 @@ def format_tools(tools):
     }
   } for tool in tools]
 
-async def run_ollama(client, mcp_client, model, num_ctx, messages):
-  print(f"📋 Fetching available tools from MCP servers...")
-  tools = await mcp_client.list_tools()
-  tools = format_tools(tools)
-  print(f"✅ Found {len(tools)} tools available")
-  
+async def run_ollama(client, model, num_ctx, messages, tools):
   print(f"🤖 Calling Ollama model: {model}")
   #TODO: make ollama call async?
   return client.chat(
