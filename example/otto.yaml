@@ -1,11 +1,11 @@
 mcp_servers:
-  - mcp_servers/test.mcp.json
+  - mcp_servers/shell.mcp.json
   # - mcp_servers/filesystem.mcp.json
   - mcp_servers/gitea.mcp.json
   - mcp_servers/slack.mcp.json
 
 system_prompts:
-  - prompts/otto.md
+  - prompts/alice.md
   # - prompts/developer.md
   # - prompts/tools.md
   # - prompts/more.md
@@ -15,6 +15,7 @@ max_iters: 10
 max_tools_per_iter: 1
 
 tools:
+- shell_execute_shell_command
 - gitea_list_my_repos
 - gitea_create_pull_request
 - gitea_list_repo_pull_requests

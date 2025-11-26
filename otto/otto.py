@@ -1,4 +1,5 @@
 import sys
+import os
 import argparse
 
 from ollama import Client
@@ -14,6 +15,9 @@ CONTEXT_LENGTH = config["ollama"]["context_length"]
 MAX_ITERS = config["max_iters"]
 MAX_TOOLS_PER_ITER = config["max_tools_per_iter"]
 
+# Allow OLLAMA_HOST environment variable to override config
+OLLAMA_HOST = os.environ.get("OLLAMA_HOST", config["ollama"]["host"])
+
 #TODO: use as default in config.py
 USER_PROMPT = "Execute your given tasks autonomously without any further user input."
 
@@ -25,7 +29,7 @@ def add_tool_message(name, content, is_error):
   # messages.append({"role": "tool", "tool_name": name, "content": content})
   messages.append({"role": "tool", "tool_name": name, "content": f"<tool_response name=\"{name}\">\n{content}\n</tool_response>"})
 
-client = Client(host=config["ollama"]["host"])
+client = Client(host=OLLAMA_HOST)
 messages = []
 
 system_prompt = load_system_prompt(config["system_prompts"])
@@ -60,6 +64,7 @@ async def append_message_and_call_tools(content, tool_calls):
     except ToolError as e:
       is_error = True
       print(tool_result)
+      #TODO: handle error (tool_result isnt defined)
       print(e)
     #TODO: check if error
     #TODO: best way to parse result?
@@ -130,9 +135,11 @@ async def main():
       print(f"🔒 No tools configured in otto.yaml - agent cannot call any tools")
     else:
       # Filter to only allowed tools
+      disallowed_tools = [tool for tool in tools if tool["function"]["name"] not in allowed_tools]
       tools = [tool for tool in tools if tool["function"]["name"] in allowed_tools]
       filtered_count = len(tools)
       print(f"🔒 Filtered to {filtered_count} allowed tools (from {original_count} total)")
+      print("Disallowed tools:", disallowed_tools)
       
       # Warn about tools in config that weren't found
       available_tool_names = {tool["function"]["name"] for tool in tools}
