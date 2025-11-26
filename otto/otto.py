@@ -7,7 +7,7 @@ from fastmcp import Client as MCPClient
 from fastmcp.exceptions import ToolError
 
 from .config import load_system_prompt, load_mcp_servers, load_config
-from .utils import run_ollama, print_message, format_tools
+from .utils import run_ollama, print_message, format_tools, print_tools
 
 config = load_config()
 MODEL = config["ollama"]["model"]
@@ -123,11 +123,12 @@ async def main():
     print(f"📋 Fetching available tools from MCP servers...")
     raw_tools = await mcp_client.list_tools()
     tools = format_tools(raw_tools)
-    print(f"✅ Found {len(tools)} tools available")
     
     # Filter tools based on allowed list in config (mandatory whitelist)
     allowed_tools = config.get("tools", [])
     original_count = len(tools)
+    
+    print_tools(tools, allowed_tools)
     
     if not allowed_tools:
       # If tools list is empty or missing, no tools are available
@@ -135,11 +136,9 @@ async def main():
       print(f"🔒 No tools configured in otto.yaml - agent cannot call any tools")
     else:
       # Filter to only allowed tools
-      disallowed_tools = [tool for tool in tools if tool["function"]["name"] not in allowed_tools]
       tools = [tool for tool in tools if tool["function"]["name"] in allowed_tools]
       filtered_count = len(tools)
-      print(f"🔒 Filtered to {filtered_count} allowed tools (from {original_count} total)")
-      print("Disallowed tools:", disallowed_tools)
+      print(f"🔒 Using {filtered_count} allowed tools (from {original_count} total)")
       
       # Warn about tools in config that weren't found
       available_tool_names = {tool["function"]["name"] for tool in tools}

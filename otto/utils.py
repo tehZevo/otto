@@ -1,4 +1,3 @@
-
 def format_tools(tools):
   return [{
     'type': 'function',
@@ -37,3 +36,15 @@ def print_message(message):
     for line in content.split('\n'):
       if line.strip():  # Only print non-empty lines
         print(f"   {line}")
+
+def print_tools(tools, allowed_tools):
+  # Get all tool names and sort alphabetically
+  all_tool_names = sorted([tool["function"]["name"] for tool in tools])
+  
+  # Print tools with allowed/disallowed status
+  print(f"Found {len(all_tool_names)} tools:")
+  for tool_name in all_tool_names:
+    if allowed_tools and tool_name in allowed_tools:
+      print(f"✓ {tool_name}")
+    else:
+      print(f"✗ {tool_name}")
