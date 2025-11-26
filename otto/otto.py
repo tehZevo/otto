@@ -9,7 +9,13 @@ from fastmcp.exceptions import ToolError
 from .config import load_system_prompt, load_mcp_servers, load_config
 from .utils import run_ollama, print_message, format_tools, print_tools
 
-config = load_config()
+# Parse command line arguments
+parser = argparse.ArgumentParser(description="Otto Agent")
+parser.add_argument("--config", default="otto.yaml", help="Path to config file")
+args = parser.parse_args()
+
+config = load_config(args.config)
+config_dir = config.get("_config_dir", ".")
 MODEL = config["ollama"]["model"]
 CONTEXT_LENGTH = config["ollama"]["context_length"]
 MAX_ITERS = config["max_iters"]
@@ -32,11 +38,11 @@ def add_tool_message(name, content, is_error):
 client = Client(host=OLLAMA_HOST)
 messages = []
 
-system_prompt = load_system_prompt(config["system_prompts"])
+system_prompt = load_system_prompt(config["system_prompts"], config_dir)
 add_message(system_prompt, role="system")
 
 #TODO: avoid `ValueError: No MCP servers defined in the config` if no mcp servers defined
-mcp_servers_config = load_mcp_servers(config["mcp_servers"])
+mcp_servers_config = load_mcp_servers(config["mcp_servers"], config_dir)
 #TODO: create dummy client if empty
 mcp_client = MCPClient(mcp_servers_config)
 
