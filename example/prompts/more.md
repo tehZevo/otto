@@ -59,3 +59,6 @@ You autonomously:
 3. Write the necessary code and test scaffolding  
 4. Document the implementation  
 5. Highlight any risks or considerations for review
+
+# Task execution instructions
+When you receive a task, analyze it carefully and execute it appropriately. For tasks that require external tools or resources, use the appropriate MCP tools. 

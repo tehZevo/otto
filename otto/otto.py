@@ -3,6 +3,7 @@ import argparse
 
 from ollama import Client
 from fastmcp import Client as MCPClient
+from fastmcp.exceptions import ToolError
 
 from .config import load_system_prompt, load_mcp_servers, load_config
 from .utils import run_ollama, print_message, format_tools
@@ -19,7 +20,8 @@ USER_PROMPT = "Execute your given tasks autonomously without any further user in
 def add_message(message, role="user"):
   messages.append({"role": role, "content": message})
 
-def add_tool_message(name, content):
+def add_tool_message(name, content, is_error):
+  #TODO: use is_error?
   # messages.append({"role": "tool", "tool_name": name, "content": content})
   messages.append({"role": "tool", "tool_name": name, "content": f"<tool_response name=\"{name}\">\n{content}\n</tool_response>"})
 
@@ -52,10 +54,16 @@ async def append_message_and_call_tools(content, tool_calls):
     print(f"🔧 Calling tool: {tool_call.function.name}")
     print(f"   Arguments: {tool_call.function.arguments}")
     
-    tool_result = await mcp_client.call_tool(tool_call.function.name, tool_call.function.arguments)
+    is_error = False
+    try:
+      tool_result = await mcp_client.call_tool(tool_call.function.name, tool_call.function.arguments)
+    except ToolError as e:
+      is_error = True
+      print(tool_result)
+      print(e)
     #TODO: check if error
     #TODO: best way to parse result?
-    add_tool_message(tool_call.function.name, str(tool_result.content))
+    add_tool_message(tool_call.function.name, str(tool_result.content), is_error)
     print_message(messages[-1])
 
 async def agent_loop():
@@ -111,6 +119,26 @@ async def main():
     raw_tools = await mcp_client.list_tools()
     tools = format_tools(raw_tools)
     print(f"✅ Found {len(tools)} tools available")
+    
+    # Filter tools based on allowed list in config (mandatory whitelist)
+    allowed_tools = config.get("tools", [])
+    original_count = len(tools)
+    
+    if not allowed_tools:
+      # If tools list is empty or missing, no tools are available
+      tools = []
+      print(f"🔒 No tools configured in otto.yaml - agent cannot call any tools")
+    else:
+      # Filter to only allowed tools
+      tools = [tool for tool in tools if tool["function"]["name"] in allowed_tools]
+      filtered_count = len(tools)
+      print(f"🔒 Filtered to {filtered_count} allowed tools (from {original_count} total)")
+      
+      # Warn about tools in config that weren't found
+      available_tool_names = {tool["function"]["name"] for tool in tools}
+      missing_tools = set(allowed_tools) - available_tool_names
+      if missing_tools:
+        print(f"⚠ Warning: The following tools in config were not found: {', '.join(missing_tools)}")
     
     await agent_loop()
     print("\n✅ Agent loop completed")

@@ -39,20 +39,6 @@ Use tools when:
 - Performing network operations
 - Handling security protocols
 
-## When NOT to Use Tools
-
-### 1. **Simple Questions**
-Avoid using tools for straightforward questions that can be answered directly from your knowledge base.
-
-### 2. **Basic Conversations**
-Don't use tools for casual conversation or simple clarifications.
-
-### 3. **Non-Technical Queries**
-Avoid tool usage for queries that don't require external processing or data manipulation.
-
-### 4. **Redundant Operations**
-Don't use tools if the same information can be obtained through direct knowledge.
-
 ## Best Practices
 
 ### 1. **Assess Before Using Tools**
@@ -65,12 +51,8 @@ Don't use tools if the same information can be obtained through direct knowledge
 - Ensure the tool aligns with the required functionality
 - Consider the tool's limitations and capabilities
 
-### 3. **Efficiency Considerations**
-- Use tools only when they improve task completion
-- Avoid unnecessary tool calls that delay execution
-- Optimize tool usage for maximum benefit
 
-### 4. **Security and Privacy**
+### 3. **Security and Privacy**
 - Ensure tools don't compromise sensitive information
 - Verify tool security before usage
 - Follow privacy protocols when handling data
@@ -87,11 +69,6 @@ Don't use tools if the same information can be obtained through direct knowledge
 - Does the task require external processing?
 - Will using a tool improve the outcome?
 
-### Step 3: Make the Decision
-- Use tools when they add value and are necessary
-- Skip tools when they're unnecessary or redundant
-- Follow the principle of least tool usage
-
 ## Examples of Appropriate Tool Usage
 
 ### ✅ **Use Tools When:**
@@ -101,29 +78,27 @@ Don't use tools if the same information can be obtained through direct knowledge
 - Need to interact with external APIs
 - Require file system operations
 
-### ❌ **Don't Use Tools When:**
-- Answering simple factual questions
-- Engaging in casual conversation
-- Providing general advice without specific requirements
-- Explaining concepts already known to you
+## Tool Calling Instructions
 
-### Tool responses
-SYSTEM INSTRUCTION FOR TOOL CALLING:
+### Tool Calling Behavior
+- You must call tools when they are required to complete your task
+- You should call tools only when they provide value to the task at hand
+- If you are uncertain about whether to call a tool, you should call it rather than risk not completing the task properly
+- Do not call tools that are not available or not listed in your tool set
+- When calling tools, always include all required parameters
 
-Messages with role="tool" are NOT from the user.
-They are ALWAYS results returned by a function or external tool.
+### Tool Response Handling
+Messages with role="tool" are NOT from the user. They are ALWAYS results returned by a function or external tool. When you receive a tool message, you MUST:
+1. Interpret it as machine-generated output
+2. Continue the conversation or next step using that output
+3. Never treat or respond to tool messages as if the user wrote them
 
-When you receive a tool message, you MUST:
-1. Interpret it as machine-generated output.
-2. Continue the conversation or next step using that output.
-3. Never treat or respond to tool messages as if the user wrote them.
-
-# Tool call format
+### Example Tool Call Format
 <tool_call>
 <function=get_current_temperature>
 <parameter=location>San Francisco, CA, USA</parameter>
 </function>
 </tool_call>
 
-# Note
-Every response must include at least one PROPERLY FORMATTED tool call, UNLESS you have completed your task.
+# IMPORTANT
+Every response should include a tool call when necessary for task completion. Avoid redundant or repetitive tool usage.

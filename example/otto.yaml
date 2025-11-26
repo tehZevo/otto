@@ -1,18 +1,36 @@
 mcp_servers:
   - mcp_servers/test.mcp.json
   # - mcp_servers/filesystem.mcp.json
+  - mcp_servers/gitea.mcp.json
+  - mcp_servers/slack.mcp.json
 
 system_prompts:
   - prompts/otto.md
-  - prompts/developer.md
-  - prompts/tools.md
-  - prompts/more.md
+  # - prompts/developer.md
+  # - prompts/tools.md
+  # - prompts/more.md
   - prompts/tasks.md
 
 max_iters: 10
 max_tools_per_iter: 1
 
+tools:
+- gitea_list_my_repos
+- gitea_create_pull_request
+- gitea_list_repo_pull_requests
+- gitea_get_pull_request_by_index
+- gitea_list_repo_issues
+- gitea_get_issue_by_index
+- gitea_create_issue
+- gitea_create_issue_comment
+- gitea_get_issue_comments_by_index
+- slack_conversations_history
+- slack_conversations_replies
+- slack_conversations_add_message
+- slack_conversations_search_messages
+- slack_channels_list
+
 ollama:
   host: ollama
-  model: qwen3-coder:30b
+  model: qwen3-coder:30b-32k
   context_length: 32768
