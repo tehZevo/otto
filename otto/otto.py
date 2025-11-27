@@ -67,14 +67,13 @@ async def append_message_and_call_tools(content, tool_calls):
     is_error = False
     try:
       tool_result = await mcp_client.call_tool(tool_call.function.name, tool_call.function.arguments)
+      result_content = str(tool_result.content)
     except ToolError as e:
       is_error = True
-      print(tool_result)
-      #TODO: handle error (tool_result isnt defined)
-      print(e)
-    #TODO: check if error
-    #TODO: best way to parse result?
-    add_tool_message(tool_call.function.name, str(tool_result.content), is_error)
+      result_content = f"ToolError: {str(e)}"
+      print(f"❌ Tool error: {e}")
+    
+    add_tool_message(tool_call.function.name, result_content, is_error)
     print_message(messages[-1])
 
 async def agent_loop():

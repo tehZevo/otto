@@ -9,8 +9,9 @@ services:
     volumes:
       - ./example:/config:ro
       - ./example/workspace:/workspace
-      #for gitea mcp #TODO: fix
       - /var/run/docker.sock:/var/run/docker.sock
+      - ./example/.gitconfig:/root/.gitconfig:ro
+      - ./example/.git-credentials:/root/.git-credentials:ro
     environment:
       - OLLAMA_HOST=${OLLAMA_HOST:-http://ollama:11434}
       - PYTHONUNBUFFERED=1

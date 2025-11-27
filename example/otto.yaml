@@ -1,8 +1,8 @@
 mcp_servers:
   - mcp_servers/shell.mcp.json
-  # - mcp_servers/filesystem.mcp.json
   - mcp_servers/gitea.mcp.json
   - mcp_servers/slack.mcp.json
+  - mcp_servers/filesystem.mcp.json
 
 system_prompts:
   - prompts/alice.md
@@ -30,6 +30,16 @@ tools:
 - slack_conversations_add_message
 - slack_conversations_search_messages
 - slack_channels_list
+- filesystem_read_text_file
+- filesystem_list_directory
+- filesystem_directory_tree
+- filesystem_search_files
+- filesystem_list_allowed_directories
+- filesystem_get_file_info
+- filesystem_create_directory
+- filesystem_write_file
+- filesystem_edit_file
+- filesystem_move_file
 
 ollama:
   host: ollama

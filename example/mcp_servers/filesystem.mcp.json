@@ -4,8 +4,8 @@
       "command": "npx",
       "args": [
         "-y",
-        "@modelcontextprotocol/server-filesystem@2025.4.24",
-        "./workspace"
+        "@modelcontextprotocol/server-filesystem",
+        "/workspace"
       ]
     }
   }
