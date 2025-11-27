@@ -15,4 +15,4 @@ services:
     environment:
       - OLLAMA_HOST=${OLLAMA_HOST:-http://ollama:11434}
       - PYTHONUNBUFFERED=1
-    restart: unless-stopped
+    # restart: unless-stopped

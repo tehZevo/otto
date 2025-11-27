@@ -1,15 +1,14 @@
 def format_tools(tools):
   return [{
-    'type': 'function',
-    'function': {
-      'name': tool.name,
-      'description': tool.description,
-      'parameters': tool.inputSchema
+    "type": "function",
+    "function": {
+      "name": tool.name,
+      "description": tool.description,
+      "parameters": tool.inputSchema
     }
   } for tool in tools]
 
 async def run_ollama(client, model, num_ctx, messages, tools):
-  print(f"🤖 Calling Ollama model: {model}")
   #TODO: make ollama call async?
   return client.chat(
     model=model,
@@ -21,19 +20,33 @@ async def run_ollama(client, model, num_ctx, messages, tools):
     }
   )
 
+def truncate_message(content, n=100):
+  lines = content.strip().split("\n")
+  content = lines[0]
+  ellipsis = False
+  if len(lines) > 1:
+    ellipsis = True
+  if len(content) > n:
+    ellipsis = True
+  if ellipsis:
+    content = content[:n] + "..."
+  return content
+
 def print_message(message):
-  if message['role'] == 'system':
-    print(f"⚙ {message['content']}")
-  elif message['role'] == 'user':
-    print(f"👤 {message['content']}")
-  elif message['role'] == 'assistant':
-    print(f"💬 {message['content']}")
-  elif message['role'] == 'tool':
+  if message["role"] == "system":
+    print(f"⚙ {message['content']}")  
+  elif message["role"] == "user":
+    content = truncate_message(message["content"])
+    print(f"👤 {content}")
+  elif message["role"] == "assistant":
+    content = truncate_message(message["content"])
+    print(f"💬 {content}")
+  elif message["role"] == "tool":
     print(f"🔧 {message['tool_name']}")
     # Print the tool response content with indentation for readability
-    content = message['content']
+    content = message["content"]
     # Indent each line of the content for better formatting
-    for line in content.split('\n'):
+    for line in content.split("\n"):
       if line.strip():  # Only print non-empty lines
         print(f"   {line}")
 
@@ -48,3 +61,38 @@ def print_tools(tools, allowed_tools):
       print(f"✓ {tool_name}")
     else:
       print(f"✗ {tool_name}")
+
+def extract_tool_results(tool_result):
+  """
+  Extract content from tool result objects - only TextContent is allowed.
+  
+  Args:
+      tool_result: The result object from a tool call
+  
+  Returns:
+      str: The extracted text content from the tool result
+  
+  Raises:
+      ValueError: If the tool result contains non-text content or no text content
+  """
+  # Extract content from result objects - only TextContent is allowed
+  if isinstance(tool_result.content, list):
+    # Validate that all content items are TextContent
+    text_contents = []
+    for item in tool_result.content:
+      if hasattr(item, 'text'):
+        text_contents.append(item.text)
+      else:
+        # Non-text content is not allowed
+        content_type = type(item).__name__
+        raise ValueError(f"Non-text content type not supported: {content_type}")
+    
+    # Require at least one text content
+    if not text_contents:
+      raise ValueError("Tool result must contain at least one text content item")
+    
+    result_content = "\n".join(text_contents)
+  else:
+    result_content = str(tool_result.content)
+  
+  return result_content
