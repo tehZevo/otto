@@ -43,9 +43,7 @@ def print_message(message):
     print(f"💬 {content}")
   elif message["role"] == "tool":
     print(f"🔧 {message['tool_name']}")
-    # Print the tool response content with indentation for readability
     content = message["content"]
-    # Indent each line of the content for better formatting
     for line in content.split("\n"):
       if line.strip():  # Only print non-empty lines
         print(f"   {line}")
@@ -96,3 +94,17 @@ def extract_tool_results(tool_result):
     result_content = str(tool_result.content)
   
   return result_content
+
+def format_builtin_tools(builtin_tools_dict):
+  tools = []
+  for tool_name, tool_func in builtin_tools_dict.items():
+    tool_def = {
+      "type": "function",
+      "function": {
+        "name": tool_name,
+        "description": tool_func.__doc__ or f"Built-in tool: {tool_name}",
+        "parameters": {}
+      }
+    }
+    tools.append(tool_def)
+  return tools

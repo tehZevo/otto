@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "todos": {
+      "command": "python",
+      "args": [
+        "mcp-todo.py",
+        "/workspace/todos.json"
+      ]
+    }
+  }
+}

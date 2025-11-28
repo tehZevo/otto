@@ -3,12 +3,14 @@ mcp_servers:
   - mcp_servers/gitea.mcp.json
   - mcp_servers/slack.mcp.json
   - mcp_servers/filesystem.mcp.json
+  - mcp_servers/todos.mcp.json
 
 system_prompts:
   - prompts/alice.md
   # - prompts/developer.md
   # - prompts/tools.md
   # - prompts/more.md
+  - prompts/todo-system.md
   - prompts/tasks.md
 
 max_iters: 30
@@ -40,6 +42,12 @@ tools:
 - filesystem_write_file
 - filesystem_edit_file
 - filesystem_move_file
+- todos_add_todos
+- todos_complete_todos
+- todos_remove_todos
+- todos_reorder_todos
+- todos_list_todos
+- todos_clear_todos
 
 ollama:
   host: ollama

@@ -8,7 +8,7 @@ from fastmcp import Client as MCPClient
 from fastmcp.exceptions import ToolError
 
 from .config import load_system_prompt, load_mcp_servers, load_config
-from .utils import run_ollama, print_message, format_tools, print_tools, extract_tool_results
+from .utils import run_ollama, print_message, format_tools, print_tools, extract_tool_results, format_builtin_tools
 from .builtin_tools import BUILTIN_TOOLS, complete_task
 
 parser = argparse.ArgumentParser(description="Otto Agent")
@@ -79,16 +79,13 @@ async def append_message_and_call_tools(content, tool_calls):
       result_content = json.dumps(tool_result, indent=2)
     except Exception as e:
       result_content = f"ToolError: {str(e)}"
-      # print(f"❌ Tool error: {e}")
       print(f"❌ {tool_call.function.name}")
     
     add_tool_message(tool_call.function.name, result_content)
-    print_message(messages[-1])
   
   # Handle MCP tools
   for tool_call in mcp_tool_calls:
-    print(f"🔧 Calling tool: {tool_call.function.name}")
-    # print(f"   Arguments: {tool_call.function.arguments}")
+    print(f"🔧 {tool_call.function.name}")
     
     try:
       tool_result = await mcp_client.call_tool(tool_call.function.name, tool_call.function.arguments)
@@ -150,48 +147,44 @@ async def main():
   global tools
   
   print("🔌 Initializing MCP client...")
-  async with mcp_client:
-    print("✅ MCP client initialized")
-    
-    # Load tools once at initialization
-    print(f"📋 Fetching available tools from MCP servers...")
-    raw_tools = await mcp_client.list_tools()
-    tools = format_tools(raw_tools)
-    
-    # Add built-in tools to the tools list so they can be called by the agent
-    for tool_name, tool_func in BUILTIN_TOOLS.items():
-      # Create tool definition for built-in tools
-      tool_def = {
-        'type': 'function',
-        'function': {
-          'name': tool_name,
-          'description': tool_func.__doc__ or f'Built-in tool: {tool_name}',
-          'parameters': {}
-        }
-      }
-      tools.append(tool_def)
-    
-    # Filter tools based on allowed list in config (mandatory whitelist)
-    allowed_tools = config.get("tools", [])
-    original_count = len(tools)
-    
-    print_tools(tools, allowed_tools)
-    
-    if not allowed_tools:
-      # If tools list is empty or missing, no tools are available
-      tools = []
-      print(f"🔒 No tools configured in otto.yaml - agent cannot call any tools")
-    else:
-      # Filter to only allowed tools
-      tools = [tool for tool in tools if tool["function"]["name"] in allowed_tools]
-      filtered_count = len(tools)
-      print(f"🔒 Using {filtered_count} allowed tools (from {original_count} total)")
+  try:
+    async with mcp_client:
+      print("✅ MCP client initialized")
+      print(f"📋 Fetching available tools from MCP servers...")
+      raw_tools = await mcp_client.list_tools()
+      tools = format_tools(raw_tools) + format_builtin_tools(BUILTIN_TOOLS)
       
-      # Warn about tools in config that weren't found
-      available_tool_names = {tool["function"]["name"] for tool in tools}
-      missing_tools = set(allowed_tools) - available_tool_names
-      if missing_tools:
-        print(f"⚠ Warning: The following tools in config were not found: {', '.join(missing_tools)}")
-    
-    await agent_loop()
-    print("\n✅ Agent loop completed")
+      allowed_tools = config.get("tools", [])
+      original_count = len(tools)
+      
+      print_tools(tools, allowed_tools)
+      
+      # Always allow built-in tools regardless of configuration
+      # Filter MCP tools to only allowed tools, but keep all built-in tools
+      if not allowed_tools:
+        # If tools list is empty or missing, only built-in tools are available
+        tools = [tool for tool in tools if tool["function"]["name"] in BUILTIN_TOOLS]
+        print(f"🔒 No tools configured in otto.yaml - only built-in tools available")
+      else:
+        # Filter MCP tools to only allowed tools, but keep all built-in tools
+        mcp_tools = [tool for tool in tools if tool["function"]["name"] not in BUILTIN_TOOLS]
+        builtin_tools = [tool for tool in tools if tool["function"]["name"] in BUILTIN_TOOLS]
+        filtered_mcp_tools = [tool for tool in mcp_tools if tool["function"]["name"] in allowed_tools]
+        tools = filtered_mcp_tools + builtin_tools
+        filtered_count = len(tools)
+        print(f"🔒 Using {filtered_count} allowed tools (from {original_count} total)")
+        
+        # Validate that all tools in config actually exist
+        available_tool_names = {tool["function"]["name"] for tool in tools}
+        missing_tools = set(allowed_tools) - available_tool_names
+        if missing_tools:
+          print(f"❌ Error: The following tools in config were not found: {', '.join(missing_tools)}")
+          print("Exiting due to invalid tool references in otto.yaml")
+          sys.exit(1)
+      
+      await agent_loop()
+      print("\n✅ Agent loop completed")
+  except Exception as e:
+    print(f"❌ Error initializing MCP client or loading servers: {e}")
+    print("Exiting due to MCP server loading failure")
+    sys.exit(1)
