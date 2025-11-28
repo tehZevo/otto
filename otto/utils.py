@@ -8,7 +8,7 @@ def format_tools(tools):
     }
   } for tool in tools]
 
-async def run_ollama(client, model, num_ctx, messages, tools):
+async def run_ollama(client, model, num_ctx, messages, tools, num_predict=1024):
   #TODO: make ollama call async?
   return client.chat(
     model=model,
@@ -16,11 +16,14 @@ async def run_ollama(client, model, num_ctx, messages, tools):
     tools=tools,
     stream=False,
     options={
-      "num_ctx": num_ctx
+      "num_ctx": num_ctx,
+      "num_predict": num_predict
     }
   )
 
 def truncate_message(content, n=100):
+  #TODO: undo
+  return content
   lines = content.strip().split("\n")
   content = lines[0]
   ellipsis = False

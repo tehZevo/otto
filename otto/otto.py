@@ -2,6 +2,7 @@ import sys
 import os
 import argparse
 import json
+import time
 
 from ollama import Client
 from fastmcp import Client as MCPClient
@@ -9,16 +10,19 @@ from fastmcp.exceptions import ToolError
 
 from .config import load_system_prompt, load_mcp_servers, load_config
 from .utils import run_ollama, print_message, format_tools, print_tools, extract_tool_results, format_builtin_tools
-from .builtin_tools import BUILTIN_TOOLS, complete_task
+from .builtin_tools import BUILTIN_TOOLS, sleep
 
 parser = argparse.ArgumentParser(description="Otto Agent")
 parser.add_argument("--config", default="otto.yaml", help="Path to config file")
+parser.add_argument("--loop", "-l", action="store_true", help="Loop indefinitely")
+parser.add_argument("--sleep", "-s", type=int, default=60, help="Sleep time in seconds between loops (default: 60)")
 args = parser.parse_args()
 
 config = load_config(args.config)
 config_dir = config.get("_config_dir", ".")
 MODEL = config["ollama"]["model"]
 CONTEXT_LENGTH = config["ollama"]["context_length"]
+#TODO: add NUM_PREDICT to config
 MAX_ITERS = config["max_iters"]
 MAX_TOOLS_PER_ITER = config["max_tools_per_iter"]
 NUM_RETRIES = config.get("num_retries", 10)
@@ -32,7 +36,7 @@ def add_message(message, role="user"):
   messages.append({"role": role, "content": message})
 
 def add_tool_message(name, content):
-  messages.append({"role": "tool", "tool_name": name, "content": f"<tool_response name=\"{name}\">\n{content}\n</tool_response>"})
+  messages.append({"role": "tool", "tool_name": name, "content": f"<tool_response name=\"{name}\">\n{content}\n"})
 
 client = Client(host=OLLAMA_HOST)
 messages = []
@@ -70,7 +74,7 @@ async def append_message_and_call_tools(content, tool_calls):
   
   # Handle built-in tools first
   for tool_call in built_in_tool_calls:
-    print(f"🔧 Calling built-in tool: {tool_call.function.name}")
+    print(f"🔧 [Built-in]: {tool_call.function.name}")
     # print(f"   Arguments: {tool_call.function.arguments}")
     
     try:
@@ -85,7 +89,7 @@ async def append_message_and_call_tools(content, tool_calls):
   
   # Handle MCP tools
   for tool_call in mcp_tool_calls:
-    print(f"🔧 {tool_call.function.name}")
+    print(f"🔧 [MCP] {tool_call.function.name}")
     
     try:
       tool_result = await mcp_client.call_tool(tool_call.function.name, tool_call.function.arguments)
@@ -96,7 +100,7 @@ async def append_message_and_call_tools(content, tool_calls):
       print(f"❌ Tool error: {e}")
     
     add_tool_message(tool_call.function.name, result_content)
-    print_message(messages[-1])
+    # print_message(messages[-1])
 
 async def agent_loop():
   add_message(USER_PROMPT, role="user")
@@ -107,25 +111,25 @@ async def agent_loop():
   no_tools_retry_count = 0
   
   while True:
-    print(f"\n🔄 Iteration {iters + 1}/{MAX_ITERS}")
+    # print(f"\n🔄 Iteration {iters + 1}/{MAX_ITERS}")
 
-    response = await run_ollama(client, MODEL, CONTEXT_LENGTH, messages, tools)
+    response = await run_ollama(client, MODEL, CONTEXT_LENGTH, messages, tools, num_predict=256)
     
     up_tokens = response.prompt_eval_count
     down_tokens = response.eval_count
-    print(f"⇄ API Request [⬆ {up_tokens} / ⬇ {down_tokens}]")
+    # print(f"⇄ API Request [⬆ {up_tokens} / ⬇ {down_tokens}]")
     tool_calls = response.message.tool_calls or []
     
     if len(tool_calls) > 0:
-      print(f"🎯 Agent requested {len(tool_calls)} tool(s)")
+      # print(f"🎯 Agent requested {len(tool_calls)} tool(s)")
       no_tools_retry_count = 0  # Reset retry counter when tools are called
     
     await append_message_and_call_tools(response.message.content, tool_calls)
     iters += 1
 
-    # Check if complete_task was called in the last iteration
-    if any(tool_call.function.name == "complete_task" for tool_call in tool_calls):
-      print(f"✅ Agent completed (complete_task called)")
+    # Check if sleep was called in the last iteration
+    if any(tool_call.function.name == "sleep" for tool_call in tool_calls):
+      print(f"✅ Agent completed (sleep called)")
       break
 
     if iters >= MAX_ITERS:
@@ -136,7 +140,7 @@ async def agent_loop():
         no_tools_retry_count += 1
         print(f"🔄 No tool calls detected. Retry {no_tools_retry_count}/{NUM_RETRIES}...")
         add_message("No tool call detected. Please ensure that your message contains a tool call and is properly formatted.")
-        print_message(messages[-1])
+        # print_message(messages[-1])
         continue
       else:
         print(f"✅ Agent completed (no more tools requested)")
@@ -182,8 +186,20 @@ async def main():
           print("Exiting due to invalid tool references in otto.yaml")
           sys.exit(1)
       
-      await agent_loop()
-      print("\n✅ Agent loop completed")
+      # Handle looping logic
+      if args.loop:
+        print("🔁 Looping infinitely with sleep interval of", args.sleep, "seconds")
+        while True:
+          await agent_loop()
+          print(f"💤 Sleeping for {args.sleep} seconds before next loop...")
+          time.sleep(args.sleep)
+          # Reset messages for next loop
+          messages.clear()
+          # Re-add system prompt for next loop
+          add_message(system_prompt, role="system")
+      else:
+        await agent_loop()
+        print("\n✅ Agent loop completed")
   except Exception as e:
     print(f"❌ Error initializing MCP client or loading servers: {e}")
     print("Exiting due to MCP server loading failure")

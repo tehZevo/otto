@@ -6,11 +6,9 @@ These tools are not loaded from MCP servers but are part of the core agent funct
 import json
 from typing import Dict, Any
 
-def complete_task() -> Dict[str, Any]:
+def sleep() -> Dict[str, Any]:
     """
-    Built-in tool to signal that all tasks are complete and exit the agent loop.
-    This tool allows the agent to explicitly signal that it has completed its tasks
-    and should exit the loop, rather than relying on other mechanisms.
+    Built-in tool to signal that the agent would like to pause work and exit the agentic loop.
     
     Returns:
         A dictionary with a 'completed' flag to indicate the agent should exit.
@@ -22,5 +20,5 @@ def complete_task() -> Dict[str, Any]:
 
 # Dictionary mapping built-in tool names to their functions
 BUILTIN_TOOLS = {
-    "complete_task": complete_task
+    "sleep": sleep
 }
