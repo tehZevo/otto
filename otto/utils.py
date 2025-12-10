@@ -1,3 +1,11 @@
+import openai
+import os
+from .config import load_config
+
+def get_openai_client(api_key, base_url=None):
+  base_url = base_url or "https://api.openai.com/v1"
+  return openai.OpenAI(api_key=api_key, base_url=base_url)
+
 def format_tools(tools):
   return [{
     "type": "function",
@@ -8,17 +16,14 @@ def format_tools(tools):
     }
   } for tool in tools]
 
-async def run_ollama(client, model, num_ctx, messages, tools, num_predict=1024):
-  #TODO: make ollama call async?
-  return client.chat(
+async def run_model(client, model, num_ctx, messages, tools, num_predict=1024):
+  # Use OpenAI Chat Completion API (compatible with any OpenAI‑like endpoint)
+  return await client.chat.completions.create(
     model=model,
     messages=messages,
     tools=tools,
     stream=False,
-    options={
-      "num_ctx": num_ctx,
-      "num_predict": num_predict
-    }
+    max_tokens=num_predict
   )
 
 def truncate_message(content, n=100):
@@ -51,17 +56,14 @@ def print_message(message):
       if line.strip():  # Only print non-empty lines
         print(f"   {line}")
 
-def print_tools(tools, allowed_tools):
-  # Get all tool names and sort alphabetically
-  all_tool_names = sorted([tool["function"]["name"] for tool in tools])
+def print_tools(allowed_tools, disallowed_tools):
+  allowed_names = sorted([tool["function"]["name"] for tool in allowed_tools])
+  disallowed_names = sorted([tool["function"]["name"] for tool in disallowed_tools])
   
-  # Print tools with allowed/disallowed status
-  print(f"Found {len(all_tool_names)} tools:")
-  for tool_name in all_tool_names:
-    if allowed_tools and tool_name in allowed_tools:
-      print(f"✓ {tool_name}")
-    else:
-      print(f"✗ {tool_name}")
+  for t in allowed_names:
+    print(f"✓ {t}")
+  for t in disallowed_names:
+    print(f"✗ {t}")
 
 def extract_tool_results(tool_result):
   """

@@ -4,13 +4,14 @@ import argparse
 import json
 import time
 
-from ollama import Client
 from fastmcp import Client as MCPClient
 from fastmcp.exceptions import ToolError
+import openai
 
 from .config import load_system_prompt, load_mcp_servers, load_config
-from .utils import run_ollama, print_message, format_tools, print_tools, extract_tool_results, format_builtin_tools
+from .utils import run_model, print_message, format_tools, print_tools, extract_tool_results, format_builtin_tools, get_openai_client
 from .builtin_tools import BUILTIN_TOOLS, sleep
+
 
 parser = argparse.ArgumentParser(description="Otto Agent")
 parser.add_argument("--config", default="otto.yaml", help="Path to config file")
@@ -20,14 +21,14 @@ args = parser.parse_args()
 
 config = load_config(args.config)
 config_dir = config.get("_config_dir", ".")
-MODEL = config["ollama"]["model"]
-CONTEXT_LENGTH = config["ollama"]["context_length"]
+MODEL = config["client"]["model"]
+OPENAI_API_KEY = config["client"]["api_key"]
+OPENAI_BASE_URL = config["client"]["base_url"]
+CONTEXT_LENGTH = config["client"]["context_length"]
 #TODO: add NUM_PREDICT to config
 MAX_ITERS = config["max_iters"]
 MAX_TOOLS_PER_ITER = config["max_tools_per_iter"]
 NUM_RETRIES = config.get("num_retries", 10)
-
-OLLAMA_HOST = os.environ.get("OLLAMA_HOST", config["ollama"]["host"])
 
 #TODO: use as default in config.py
 USER_PROMPT = "Execute your given tasks autonomously without any further user input. Use the built-in task completion tool when you are finished."
@@ -38,8 +39,8 @@ def add_message(message, role="user"):
 def add_tool_message(name, content):
   messages.append({"role": "tool", "tool_name": name, "content": f"<tool_response name=\"{name}\">\n{content}\n"})
 
-client = Client(host=OLLAMA_HOST)
 messages = []
+client = openai.OpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_BASE_URL)
 
 system_prompt = load_system_prompt(config["system_prompts"], config_dir)
 add_message(system_prompt, role="system")
@@ -49,7 +50,35 @@ mcp_servers_config = load_mcp_servers(config["mcp_servers"], config_dir)
 #TODO: create dummy client if empty
 mcp_client = MCPClient(mcp_servers_config)
 
+#TODO: make non global
 tools = []
+
+async def get_tool_call():
+  """Get tool calls from the model, retrying if necessary."""
+  retry_count = 0
+  while retry_count <= NUM_RETRIES:
+    response = await run_model(client, MODEL, CONTEXT_LENGTH, messages, tools, num_predict=256)
+    
+    up_tokens = response.prompt_eval_count
+    down_tokens = response.eval_count
+    # print(f"⇄ API Request [⬆ {up_tokens} / ⬇ {down_tokens}]")
+    tool_calls = response.message.tool_calls or []
+    
+    if len(tool_calls) > 0:
+      # print(f"🎯 Agent requested {len(tool_calls)} tool(s)")
+      return response.message.content, tool_calls
+    
+    # No tools called - retry or exit
+    if retry_count < NUM_RETRIES:
+      retry_count += 1
+      print(f"🔄 No tool calls detected. Retry {retry_count}/{NUM_RETRIES}...")
+      add_message("No tool call detected. Please ensure that your message contains a tool call and is properly formatted.")
+      # print_message(messages[-1])
+    else:
+      # Exhausted retries
+      print(f"✅ Agent completed (no more tools requested)")
+      print(f"\n⏹ Stopped: Agent finished (no more tools after {NUM_RETRIES} retries)")
+      return None, None
 
 async def append_message_and_call_tools(content, tool_calls):
   if content.strip() != "":
@@ -104,103 +133,68 @@ async def append_message_and_call_tools(content, tool_calls):
 
 async def agent_loop():
   add_message(USER_PROMPT, role="user")
-  print(f"🚀 Starting agent loop (max iterations: {MAX_ITERS}, max retries: {NUM_RETRIES})")
+  print(f"🚀 Starting agent loop (max steps: {MAX_ITERS}, max retries: {NUM_RETRIES})")
 
-  iters = 0
-  tool_calls = []
-  no_tools_retry_count = 0
+  steps = 0
   
   while True:
-    # print(f"\n🔄 Iteration {iters + 1}/{MAX_ITERS}")
+    content, tool_calls = await get_tool_call()
+    
+    if tool_calls is None:
+      return
+    
+    await append_message_and_call_tools(content, tool_calls)
+    steps += 1
 
-    response = await run_ollama(client, MODEL, CONTEXT_LENGTH, messages, tools, num_predict=256)
-    
-    up_tokens = response.prompt_eval_count
-    down_tokens = response.eval_count
-    # print(f"⇄ API Request [⬆ {up_tokens} / ⬇ {down_tokens}]")
-    tool_calls = response.message.tool_calls or []
-    
-    if len(tool_calls) > 0:
-      # print(f"🎯 Agent requested {len(tool_calls)} tool(s)")
-      no_tools_retry_count = 0  # Reset retry counter when tools are called
-    
-    await append_message_and_call_tools(response.message.content, tool_calls)
-    iters += 1
-
-    # Check if sleep was called in the last iteration
     if any(tool_call.function.name == "sleep" for tool_call in tool_calls):
       print(f"✅ Agent completed (sleep called)")
       break
 
-    if iters >= MAX_ITERS:
-      print(f"\n⏹ Stopped: Reached max iterations ({MAX_ITERS})")
+    if steps >= MAX_ITERS:
+      print(f"\n⏹ Stopped: Reached max steps ({MAX_ITERS})")
       break
-    if len(tool_calls) == 0:
-      if no_tools_retry_count < NUM_RETRIES:
-        no_tools_retry_count += 1
-        print(f"🔄 No tool calls detected. Retry {no_tools_retry_count}/{NUM_RETRIES}...")
-        add_message("No tool call detected. Please ensure that your message contains a tool call and is properly formatted.")
-        # print_message(messages[-1])
-        continue
-      else:
-        print(f"✅ Agent completed (no more tools requested)")
-        print(f"\n⏹ Stopped: Agent finished (no more tools after {NUM_RETRIES} retries)")
-        break
+
+def setup_tools(mcp_tools):
+  mcp_tools = format_tools(mcp_tools)
+  builtin_tools = format_builtin_tools(BUILTIN_TOOLS)
+  
+  available_mcp_tool_names = {tool["function"]["name"] for tool in mcp_tools}
+  allowed_mcp_tool_names = config.get("tools", []) or [] #handle cases where it's just `tools:`
+  total_mcp_tool_count = len(mcp_tools)
+  
+  # allowed_mcp_tools = [tool for tool in mcp_tools if tool["function"]["name"] in allowed_tool_names]
+  allowed_mcp_tools = [tool for tool in mcp_tools if tool["function"]["name"] in allowed_mcp_tool_names]
+  disallowed_mcp_tools = [tool for tool in mcp_tools if tool["function"]["name"] not in allowed_mcp_tool_names]
+  allowed_mcp_tool_count = len(allowed_mcp_tools)
+
+  missing_tools = set(allowed_mcp_tool_names) - available_mcp_tool_names
+
+  if missing_tools:
+    print(f"❌ Error: The following tools in config were not found: {', '.join(missing_tools)}")
+    print("Exiting due to invalid tool references in otto.yaml")
+    sys.exit(1)
+  
+  print(f"🔒 Allowing {allowed_mcp_tool_count} of {total_mcp_tool_count} tools:")
+  print_tools(allowed_mcp_tools, disallowed_mcp_tools)
+
+  return allowed_mcp_tools + builtin_tools
 
 async def main():
   global tools
   
   print("🔌 Initializing MCP client...")
-  try:
-    async with mcp_client:
-      print("✅ MCP client initialized")
-      print(f"📋 Fetching available tools from MCP servers...")
-      raw_tools = await mcp_client.list_tools()
-      tools = format_tools(raw_tools) + format_builtin_tools(BUILTIN_TOOLS)
-      
-      allowed_tools = config.get("tools", [])
-      original_count = len(tools)
-      
-      print_tools(tools, allowed_tools)
-      
-      # Always allow built-in tools regardless of configuration
-      # Filter MCP tools to only allowed tools, but keep all built-in tools
-      if not allowed_tools:
-        # If tools list is empty or missing, only built-in tools are available
-        tools = [tool for tool in tools if tool["function"]["name"] in BUILTIN_TOOLS]
-        print(f"🔒 No tools configured in otto.yaml - only built-in tools available")
-      else:
-        # Filter MCP tools to only allowed tools, but keep all built-in tools
-        mcp_tools = [tool for tool in tools if tool["function"]["name"] not in BUILTIN_TOOLS]
-        builtin_tools = [tool for tool in tools if tool["function"]["name"] in BUILTIN_TOOLS]
-        filtered_mcp_tools = [tool for tool in mcp_tools if tool["function"]["name"] in allowed_tools]
-        tools = filtered_mcp_tools + builtin_tools
-        filtered_count = len(tools)
-        print(f"🔒 Using {filtered_count} allowed tools (from {original_count} total)")
-        
-        # Validate that all tools in config actually exist
-        available_tool_names = {tool["function"]["name"] for tool in tools}
-        missing_tools = set(allowed_tools) - available_tool_names
-        if missing_tools:
-          print(f"❌ Error: The following tools in config were not found: {', '.join(missing_tools)}")
-          print("Exiting due to invalid tool references in otto.yaml")
-          sys.exit(1)
-      
-      # Handle looping logic
-      if args.loop:
-        print("🔁 Looping infinitely with sleep interval of", args.sleep, "seconds")
-        while True:
-          await agent_loop()
-          print(f"💤 Sleeping for {args.sleep} seconds before next loop...")
-          time.sleep(args.sleep)
-          # Reset messages for next loop
-          messages.clear()
-          # Re-add system prompt for next loop
-          add_message(system_prompt, role="system")
-      else:
-        await agent_loop()
-        print("\n✅ Agent loop completed")
-  except Exception as e:
-    print(f"❌ Error initializing MCP client or loading servers: {e}")
-    print("Exiting due to MCP server loading failure")
-    sys.exit(1)
+  async with mcp_client:
+    print(f"📋 Fetching available tools from MCP servers...")
+    mcp_tools = await mcp_client.list_tools()
+    tools = setup_tools(mcp_tools)
+
+    while True:
+      await agent_loop()
+      if not args.loop:
+        break
+      print(f"💤 Sleeping for {args.sleep} seconds before next loop...")
+      time.sleep(args.sleep)
+      # Reset messages for next loop
+      messages.clear()
+      # Re-add system prompt for next loop
+      add_message(system_prompt, role="system")
