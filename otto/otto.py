@@ -6,7 +6,6 @@ import time
 
 from fastmcp import Client as MCPClient
 from fastmcp.exceptions import ToolError
-import openai
 
 from .config import load_system_prompt, load_mcp_servers, load_config
 from .utils import run_model, print_message, format_tools, print_tools, extract_tool_results, format_builtin_tools, get_openai_client
@@ -36,11 +35,11 @@ USER_PROMPT = "Execute your given tasks autonomously without any further user in
 def add_message(message, role="user"):
   messages.append({"role": role, "content": message})
 
-def add_tool_message(name, content):
-  messages.append({"role": "tool", "tool_name": name, "content": f"<tool_response name=\"{name}\">\n{content}\n"})
+def add_tool_message(tool_call_id, name, content):
+  messages.append({"role": "tool", "tool_call_id": tool_call_id, "content": f"<tool_response name=\"{name}\">\n{content}\n"})
 
 messages = []
-client = openai.OpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_BASE_URL)
+client = get_openai_client(OPENAI_API_KEY, OPENAI_BASE_URL)
 
 system_prompt = load_system_prompt(config["system_prompts"], config_dir)
 add_message(system_prompt, role="system")
@@ -53,49 +52,62 @@ mcp_client = MCPClient(mcp_servers_config)
 #TODO: make non global
 tools = []
 
-async def get_tool_call():
+async def get_tool_calls():
   """Get tool calls from the model, retrying if necessary."""
   retry_count = 0
   while retry_count <= NUM_RETRIES:
-    response = await run_model(client, MODEL, CONTEXT_LENGTH, messages, tools, num_predict=256)
-    
-    up_tokens = response.prompt_eval_count
-    down_tokens = response.eval_count
-    # print(f"⇄ API Request [⬆ {up_tokens} / ⬇ {down_tokens}]")
-    tool_calls = response.message.tool_calls or []
-    
+    #TODO: unhardcode token count here
+    content, tool_calls, up_tokens, down_tokens = await run_model(client, MODEL, messages, tools, 256)
+    print(content, tool_calls)
+    print(f"⇄ API Request [⬆ {up_tokens} / ⬇ {down_tokens}]")
+
+    tool_calls = tool_calls or []
     if len(tool_calls) > 0:
-      # print(f"🎯 Agent requested {len(tool_calls)} tool(s)")
-      return response.message.content, tool_calls
+      print(f"🎯 Agent requested {len(tool_calls)} tool(s)")
+      return content, tool_calls
     
-    # No tools called - retry or exit
     if retry_count < NUM_RETRIES:
       retry_count += 1
       print(f"🔄 No tool calls detected. Retry {retry_count}/{NUM_RETRIES}...")
       add_message("No tool call detected. Please ensure that your message contains a tool call and is properly formatted.")
-      # print_message(messages[-1])
     else:
-      # Exhausted retries
       print(f"✅ Agent completed (no more tools requested)")
       print(f"\n⏹ Stopped: Agent finished (no more tools after {NUM_RETRIES} retries)")
       return None, None
 
 async def append_message_and_call_tools(content, tool_calls):
-  if content.strip() != "":
+  tool_calls = tool_calls or []
+  
+  # Always add assistant message when there are tool calls
+  # This is required by the OpenAI API - tool messages must follow an assistant message with tool_calls
+  if len(tool_calls) > 0:
+    assistant_msg = {"role": "assistant", "content": content or ""}
+    # Add tool_calls to the assistant message
+    assistant_msg["tool_calls"] = [
+      {
+        "id": tc.id,
+        "type": "function",
+        "function": {"name": tc.function.name, "arguments": tc.function.arguments}
+      }
+      for tc in tool_calls
+    ]
+    messages.append(assistant_msg)
+    print_message(messages[-1])
+  elif content is not None and content.strip() != "":
+    # No tool calls, just add content if present
     add_message(content, role="assistant")
     print_message(messages[-1])
-  
-  # Limit the number of tools executed per iteration
-  tools_to_execute = tool_calls[:MAX_TOOLS_PER_ITER]
-  
+
   if len(tool_calls) > MAX_TOOLS_PER_ITER:
     print(f"⚠ Limiting tool execution to {MAX_TOOLS_PER_ITER} of {len(tool_calls)} requested tools")
+  
+  tool_calls = tool_calls[:MAX_TOOLS_PER_ITER]
   
   # Check for built-in tools first (like complete_task)
   built_in_tool_calls = []
   mcp_tool_calls = []
   
-  for tool_call in tools_to_execute:
+  for tool_call in tool_calls:
     if tool_call.function.name in BUILTIN_TOOLS:
       built_in_tool_calls.append(tool_call)
     else:
@@ -104,7 +116,6 @@ async def append_message_and_call_tools(content, tool_calls):
   # Handle built-in tools first
   for tool_call in built_in_tool_calls:
     print(f"🔧 [Built-in]: {tool_call.function.name}")
-    # print(f"   Arguments: {tool_call.function.arguments}")
     
     try:
       # For built-in tools, we call the function directly
@@ -114,21 +125,24 @@ async def append_message_and_call_tools(content, tool_calls):
       result_content = f"ToolError: {str(e)}"
       print(f"❌ {tool_call.function.name}")
     
-    add_tool_message(tool_call.function.name, result_content)
+    add_tool_message(tool_call.id, tool_call.function.name, result_content)
   
   # Handle MCP tools
   for tool_call in mcp_tool_calls:
     print(f"🔧 [MCP] {tool_call.function.name}")
     
     try:
-      tool_result = await mcp_client.call_tool(tool_call.function.name, tool_call.function.arguments)
+      # Parse arguments from JSON string to dictionary
+      # OpenAI returns arguments as a JSON string, but MCP client expects a dict
+      arguments = json.loads(tool_call.function.arguments) if isinstance(tool_call.function.arguments, str) else tool_call.function.arguments
+      tool_result = await mcp_client.call_tool(tool_call.function.name, arguments)
       # Extract content from result objects - only TextContent is allowed
       result_content = extract_tool_results(tool_result)
-    except (ToolError, ValueError) as e:
+    except (ToolError, ValueError, json.JSONDecodeError) as e:
       result_content = f"ToolError: {str(e)}"
       print(f"❌ Tool error: {e}")
     
-    add_tool_message(tool_call.function.name, result_content)
+    add_tool_message(tool_call.id, tool_call.function.name, result_content)
     # print_message(messages[-1])
 
 async def agent_loop():
@@ -138,7 +152,7 @@ async def agent_loop():
   steps = 0
   
   while True:
-    content, tool_calls = await get_tool_call()
+    content, tool_calls = await get_tool_calls()
     
     if tool_calls is None:
       return

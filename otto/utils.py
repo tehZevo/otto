@@ -4,7 +4,7 @@ from .config import load_config
 
 def get_openai_client(api_key, base_url=None):
   base_url = base_url or "https://api.openai.com/v1"
-  return openai.OpenAI(api_key=api_key, base_url=base_url)
+  return openai.AsyncOpenAI(api_key=api_key, base_url=base_url)
 
 def format_tools(tools):
   return [{
@@ -16,15 +16,21 @@ def format_tools(tools):
     }
   } for tool in tools]
 
-async def run_model(client, model, num_ctx, messages, tools, num_predict=1024):
-  # Use OpenAI Chat Completion API (compatible with any OpenAI‑like endpoint)
-  return await client.chat.completions.create(
+
+async def run_model(client, model, messages, tools, max_tokens=1024):
+  response = await client.chat.completions.create(
     model=model,
     messages=messages,
     tools=tools,
     stream=False,
-    max_tokens=num_predict
+    max_tokens=max_tokens
   )
+
+  up_tokens = response.usage.prompt_tokens
+  down_tokens = response.usage.completion_tokens
+  message = response.choices[0].message
+  
+  return message.content, message.tool_calls, up_tokens, down_tokens
 
 def truncate_message(content, n=100):
   #TODO: undo
