@@ -6,11 +6,11 @@ setup(
     packages=find_packages(),
     entry_points={
         "console_scripts": [
-            "otto=otto",
+            "otto=otto:main",
         ],
     },
     install_requires=[
-        "ollama>=0.1.0",
+        "openai>=1.30.0",
         "fastmcp>=0.1.0",
         "PyYAML>=5.4.0",
     ]
