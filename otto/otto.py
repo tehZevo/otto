@@ -8,7 +8,7 @@ from fastmcp import Client as MCPClient
 from fastmcp.exceptions import ToolError
 
 from .config import load_system_prompt, load_mcp_servers, load_config
-from .utils import run_model, print_message, format_tools, print_tools, extract_tool_results, format_builtin_tools, get_openai_client
+from .utils import run_model, print_message, format_tools, print_tools, extract_tool_results, format_builtin_tools, get_openai_client, format_tool_call
 from .builtin_tools import BUILTIN_TOOLS, sleep
 
 
@@ -24,7 +24,7 @@ MODEL = config["client"]["model"]
 OPENAI_API_KEY = config["client"]["api_key"]
 OPENAI_BASE_URL = config["client"]["base_url"]
 CONTEXT_LENGTH = config["client"]["context_length"]
-#TODO: add NUM_PREDICT to config
+MAX_TOKENS = config["client"].get("max_tokens", 256)
 MAX_ITERS = config["max_iters"]
 MAX_TOOLS_PER_ITER = config["max_tools_per_iter"]
 NUM_RETRIES = config.get("num_retries", 10)
@@ -56,14 +56,11 @@ async def get_tool_calls():
   """Get tool calls from the model, retrying if necessary."""
   retry_count = 0
   while retry_count <= NUM_RETRIES:
-    #TODO: unhardcode token count here
-    content, tool_calls, up_tokens, down_tokens = await run_model(client, MODEL, messages, tools, 256)
-    print(content, tool_calls)
+    content, tool_calls, up_tokens, down_tokens = await run_model(client, MODEL, messages, tools, MAX_TOKENS)
     print(f"⇄ API Request [⬆ {up_tokens} / ⬇ {down_tokens}]")
 
     tool_calls = tool_calls or []
     if len(tool_calls) > 0:
-      print(f"🎯 Agent requested {len(tool_calls)} tool(s)")
       return content, tool_calls
     
     if retry_count < NUM_RETRIES:
@@ -115,7 +112,7 @@ async def append_message_and_call_tools(content, tool_calls):
   
   # Handle built-in tools first
   for tool_call in built_in_tool_calls:
-    print(f"🔧 [Built-in]: {tool_call.function.name}")
+    print(f"🔧 [Built-in] {format_tool_call(tool_call.function.name, tool_call.function.arguments)}")
     
     try:
       # For built-in tools, we call the function directly
@@ -129,7 +126,7 @@ async def append_message_and_call_tools(content, tool_calls):
   
   # Handle MCP tools
   for tool_call in mcp_tool_calls:
-    print(f"🔧 [MCP] {tool_call.function.name}")
+    print(f"🔧 [MCP] {format_tool_call(tool_call.function.name, tool_call.function.arguments)}")
     
     try:
       # Parse arguments from JSON string to dictionary
