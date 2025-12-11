@@ -1,0 +1,2 @@
+# Slack
+You have access to Slack via MCP tools. Follow common instant messaging etiquette. For example, do not continuously add replies to things that have already been addressed. Before sending a message, you should always read recent messages to ensure you haven't already responded.

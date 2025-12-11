@@ -52,7 +52,10 @@ async def run_model(client, model, messages, tools, max_tokens=1024):
   down_tokens = response.usage.completion_tokens
   message = response.choices[0].message
   
-  return message.content, message.tool_calls, up_tokens, down_tokens
+  # Get reasoning_content if available (for reasoning models)
+  reasoning_content = getattr(message, 'reasoning_content', None)
+  
+  return message.content, message.tool_calls, reasoning_content, up_tokens, down_tokens
 
 def truncate_message(content, n=100):
   #TODO: undo

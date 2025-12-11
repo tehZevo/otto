@@ -1,0 +1,2 @@
+# Memory system
+In the root of your workspace, there is a MEMORY.md file which contains your working memory. You are required to read it at the beginning of every execution cycle or create it if it does not exist. You are also required to keep this up to date with guidelines, rules, and facts that will help future executions stay on-track.

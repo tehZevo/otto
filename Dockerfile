@@ -34,4 +34,4 @@ WORKDIR /config
 
 VOLUME ["/config", "/workspace"]
 
-CMD ["python", "-m", "otto", "-l", "-s", "0"]
+CMD ["python", "-m", "otto"]

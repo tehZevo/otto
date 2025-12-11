@@ -14,8 +14,6 @@ from .builtin_tools import BUILTIN_TOOLS, sleep
 
 parser = argparse.ArgumentParser(description="Otto Agent")
 parser.add_argument("--config", default="otto.yaml", help="Path to config file")
-parser.add_argument("--loop", "-l", action="store_true", help="Loop indefinitely")
-parser.add_argument("--sleep", "-s", type=int, default=60, help="Sleep time in seconds between loops (default: 60)")
 args = parser.parse_args()
 
 config = load_config(args.config)
@@ -28,6 +26,8 @@ MAX_TOKENS = config["client"].get("max_tokens", 256)
 MAX_ITERS = config["max_iters"]
 MAX_TOOLS_PER_ITER = config["max_tools_per_iter"]
 NUM_RETRIES = config.get("num_retries", 10)
+LOOP = config.get("loop", False)
+SLEEP_TIME = config.get("sleep_time", 60)
 
 #TODO: use as default in config.py
 USER_PROMPT = "Execute your given tasks autonomously without any further user input. Use the built-in task completion tool when you are finished."
@@ -56,12 +56,12 @@ async def get_tool_calls():
   """Get tool calls from the model, retrying if necessary."""
   retry_count = 0
   while retry_count <= NUM_RETRIES:
-    content, tool_calls, up_tokens, down_tokens = await run_model(client, MODEL, messages, tools, MAX_TOKENS)
+    content, tool_calls, reasoning_content, up_tokens, down_tokens = await run_model(client, MODEL, messages, tools, MAX_TOKENS)
     print(f"⇄ API Request [⬆ {up_tokens} / ⬇ {down_tokens}]")
-
+    
     tool_calls = tool_calls or []
     if len(tool_calls) > 0:
-      return content, tool_calls
+      return content, tool_calls, reasoning_content, up_tokens, down_tokens
     
     if retry_count < NUM_RETRIES:
       retry_count += 1
@@ -70,10 +70,24 @@ async def get_tool_calls():
     else:
       print(f"✅ Agent completed (no more tools requested)")
       print(f"\n⏹ Stopped: Agent finished (no more tools after {NUM_RETRIES} retries)")
-      return None, None
+      return None, None, None, 0, 0
 
-async def append_message_and_call_tools(content, tool_calls):
+async def append_message_and_call_tools(content, reasoning_content, tool_calls):
   tool_calls = tool_calls or []
+  
+  # Log reasoning content (thought bubble) if present
+  if reasoning_content and reasoning_content.strip():
+    print(f"💭 Agent reasoning:")
+    for line in reasoning_content.strip().split('\n'):
+      if line.strip():
+        print(f"   {line}")
+  
+  # Log content (speech bubble) if present
+  if content and content.strip():
+    print(f"� Agent response:")
+    for line in content.strip().split('\n'):
+      if line.strip():
+        print(f"   {line}")
   
   # Always add assistant message when there are tool calls
   # This is required by the OpenAI API - tool messages must follow an assistant message with tool_calls
@@ -89,11 +103,9 @@ async def append_message_and_call_tools(content, tool_calls):
       for tc in tool_calls
     ]
     messages.append(assistant_msg)
-    print_message(messages[-1])
   elif content is not None and content.strip() != "":
     # No tool calls, just add content if present
     add_message(content, role="assistant")
-    print_message(messages[-1])
 
   if len(tool_calls) > MAX_TOOLS_PER_ITER:
     print(f"⚠ Limiting tool execution to {MAX_TOOLS_PER_ITER} of {len(tool_calls)} requested tools")
@@ -143,19 +155,36 @@ async def append_message_and_call_tools(content, tool_calls):
     # print_message(messages[-1])
 
 async def agent_loop():
-  add_message(USER_PROMPT, role="user")
   print(f"🚀 Starting agent loop (max steps: {MAX_ITERS}, max retries: {NUM_RETRIES})")
 
   steps = 0
+  current_tokens = 0
   
   while True:
-    content, tool_calls = await get_tool_calls()
+    # Add user prompt with context information before each iteration
+    if steps == 0:
+      # First iteration - no token info yet
+      prompt = f"{USER_PROMPT}\n\nIteration: {steps + 1}/{MAX_ITERS}"
+    else:
+      # Subsequent iterations - include token usage
+      context_pct = int((current_tokens / CONTEXT_LENGTH) * 100)
+      prompt = f"{USER_PROMPT}\n\nIteration: {steps + 1}/{MAX_ITERS} | Context: {current_tokens:,}/{CONTEXT_LENGTH:,} tokens ({context_pct}%)"
     
+    add_message(prompt, role="user")
+    
+    result = await get_tool_calls()
+    content, tool_calls, reasoning_content, up_tokens, down_tokens = result
     if tool_calls is None:
       return
     
-    await append_message_and_call_tools(content, tool_calls)
+    current_tokens = up_tokens
+    
+    await append_message_and_call_tools(content, reasoning_content, tool_calls)
     steps += 1
+    
+    # Show iteration counter
+    context_pct = int((current_tokens / CONTEXT_LENGTH) * 100)
+    print(f"📊 Iteration {steps}/{MAX_ITERS} | Context: {current_tokens:,}/{CONTEXT_LENGTH:,} tokens ({context_pct}%)")
 
     if any(tool_call.function.name == "sleep" for tool_call in tool_calls):
       print(f"✅ Agent completed (sleep called)")
@@ -201,10 +230,10 @@ async def main():
 
     while True:
       await agent_loop()
-      if not args.loop:
+      if not LOOP:
         break
-      print(f"💤 Sleeping for {args.sleep} seconds before next loop...")
-      time.sleep(args.sleep)
+      print(f"💤 Sleeping for {SLEEP_TIME} seconds before next loop...")
+      time.sleep(SLEEP_TIME)
       # Reset messages for next loop
       messages.clear()
       # Re-add system prompt for next loop

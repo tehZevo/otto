@@ -7,14 +7,22 @@ mcp_servers:
 
 system_prompts:
   - prompts/alice.md
-  # - prompts/developer.md
-  # - prompts/tools.md
-  # - prompts/more.md
+  - prompts/developer.md
+  - prompts/environment.md
+  - prompts/memory.md
   - prompts/todo-system.md
+  - prompts/git.md
+  - prompts/slack.md
+  - prompts/help.md
   - prompts/tasks.md
 
 max_iters: 30
+num_retries: 3
 max_tools_per_iter: 10
+
+# Loop configuration
+loop: true
+sleep_time: 60
 
 tools:
 - shell_execute_shell_command
@@ -27,6 +35,8 @@ tools:
 - gitea_create_issue
 - gitea_create_issue_comment
 - gitea_get_issue_comments_by_index
+- gitea_get_my_user_info
+- gitea_list_branches
 - slack_conversations_history
 - slack_conversations_replies
 - slack_conversations_add_message
@@ -39,6 +49,7 @@ tools:
 - filesystem_list_allowed_directories
 - filesystem_get_file_info
 - filesystem_create_directory
+- filesystem_read_multiple_files
 - filesystem_write_file
 - filesystem_edit_file
 - filesystem_move_file
