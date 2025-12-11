@@ -11,6 +11,6 @@ services:
       - ./example/.gitconfig:/root/.gitconfig:ro
       - ./example/.git-credentials:/root/.git-credentials:ro
     environment:
-      - OLLAMA_HOST=${OLLAMA_HOST:-http://ollama:11434}
       - PYTHONUNBUFFERED=1
+    env_file: ./example/.env
     # restart: unless-stopped

@@ -30,7 +30,7 @@ tools:
 - slack_conversations_history
 - slack_conversations_replies
 - slack_conversations_add_message
-- slack_conversations_search_messages
+# - slack_conversations_search_messages
 - slack_channels_list
 - filesystem_read_text_file
 - filesystem_list_directory
@@ -49,7 +49,8 @@ tools:
 - todos_list_todos
 - todos_clear_todos
 
-ollama:
-  host: ollama
-  model: qwen3-coder:30b-32k
-  context_length: 32768
+client:
+  api_key: "${OPENAI_API_KEY}"
+  base_url: "{OPENAI_BASE_URL}"
+  model: "gpt-oss-120b"
+  context_length: 32000

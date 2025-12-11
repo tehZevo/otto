@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "gitea": {
+      "command": "docker",
+      "args": [
+        "run", "-i", "--rm",
+        "-e", "GITEA_ACCESS_TOKEN", 
+        "-e", "GITEA_HOST",
+        "docker.gitea.com/gitea-mcp-server"
+      ],
+      "env": {
+        "GITEA_ACCESS_TOKEN": "${GITEA_ACCESS_TOKEN}",
+        "GITEA_HOST": "http://host.docker.internal:3000"
+      }
+    }
+  }
+}
